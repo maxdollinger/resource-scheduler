@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <title>Only HTML & CSS</title>
+  </head>
+  <body class="p-2">
+    <dialog
+      id="modal"
+      class="m-auto border-1 rounded-md shadow-lg backdrop-blur bg-transparent p-2 min-w-[20vw] min-h-[20vh]"
+      autofocus
+    >
+      <div class="flex justify-end">
+        <button
+          class="flex justify-center rounded-xl w-[1.5rem] h-[1.5rem] bg-slate-800 text-white transition-all focus:bg-slate-700 focus:shadow-none active:bg-slate-700 hover:bg-slate-700 active:shadow-none disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none"
+          onclick="modal.close()"
+        >
+          X
+        </button>
+      </div>
+      <details class="border-1 rounded-md p-1 w-[fit-content]">
+        <summary>Some Error occured</summary>
+        <p class="pl-4">It is always good to know the basics</p>
+      </details>
+    </dialog>
+    <button
+      class="rounded-md bg-slate-800 py-2 px-4 border border-transparent text-center text-sm text-white transition-all shadow-md hover:shadow-lg focus:bg-slate-700 focus:shadow-none active:bg-slate-700 hover:bg-slate-700 active:shadow-none disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none ml-2"
+      type="button"
+      onclick="modal.showModal()"
+    >
+      Open
+    </button>
+  </body>
+</html>

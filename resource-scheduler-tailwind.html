@@ -1,0 +1,824 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resource-Scheduler</title>
+    <!-- Tailwind CSS über CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  </head>
+  <body class="bg-gray-100 m-0 p-5">
+    <div class="max-w-7xl mx-auto bg-white rounded-lg shadow-md p-5">
+      <h1 class="text-center text-2xl font-bold text-gray-800 mb-5">
+        Resource-Scheduler
+      </h1>
+
+      <details class="border border-1 p-2 rounded-md">
+        <summary class="text-lg font-bold">Event Settings</summary>
+        <form id="titleForm" class="flex flex-row p-2">
+          <div class="p-2">
+            <label for="eventTitle" class="block font-bold mb-1">Titel:</label>
+            <input
+              type="text"
+              id="eventTitle"
+              class="w-full h-[1.5rem] p-2 border border-gray-300 rounded"
+              value="new Event"
+              required
+            />
+          </div>
+          <div class="p-2">
+            <label for="eventDayCount" class="block font-bold mb-1"
+              >EventLength (in days):</label
+            >
+            <input
+              type="number"
+              id="eventDayCount"
+              inputmode="numeric"
+              class="w-[5rem] h-[1.5rem] p-2 border border-gray-300 rounded"
+              value="2"
+              min="1"
+              max="5"
+              step="1"
+              required
+              onchange="(e) => {
+              const newValue = Math.round(Number(e.target.value));
+              eventDayCount.value =
+                newValue < 1 ? 1 : newValue > 5 ? 5 : newValue;
+            }"
+            />
+          </div>
+        </form>
+      </details>
+
+      <div class="flex justify-center items-center p-2">
+        <div class="flex items-center gap-2">
+          <button
+            id="prev-week"
+            class="border hover:border-none hover:bg-purple-500 hover:shadow-md p-2 rounded-md cursor-pointer"
+          >
+            «
+          </button>
+          <span id="current-week-display" class="text-gray-700"> </span>
+          <button
+            id="next-week"
+            class="border hover:border-none hover:bg-purple-500 hover:shadow-md p-2 rounded-md cursor-pointer"
+          >
+            »
+          </button>
+        </div>
+      </div>
+
+      <div id="schedulerContainer" class="overflow-x-auto pb-[1rem]">
+        <table
+          class="w-[fit-content] border-collapse table-fixed"
+          id="scheduler"
+        >
+          <thead>
+            <tr id="headerRow">
+              <th
+                class="border border-gray-300 bg-gray-100 p-2 relative sticky top-0 left-0 overflow-auto z-10 w-50"
+              >
+                Resources
+                <div
+                  class="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize bg-gray-300"
+                ></div>
+              </th>
+              <!-- Tage werden per JavaScript eingefügt -->
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <!-- Ressourcen werden per JavaScript eingefügt -->
+          </tbody>
+        </table>
+      </div>
+      <p class="text-sm">
+        <i
+          >Press <kbd>CTRL</kbd> or <kbd>CMD</kbd> to add or remove single
+          days</i
+        >
+      </p>
+    </div>
+
+    <script>
+      // Datenstrukturen
+      let resources = [
+        {
+          id: 1,
+          name: "Room 1",
+          groupId: 1,
+          available: [
+            { start: new Date("2025-05-01"), end: new Date("2025-05-18") },
+            { start: new Date("2025-06-01"), end: new Date("2025-06-30") },
+          ],
+        },
+        {
+          id: 2,
+          name: "Room 2",
+          groupId: 1,
+          available: [
+            { start: new Date("2025-05-01"), end: new Date("2025-06-04") },
+          ],
+        },
+        {
+          id: 5,
+          name: "Max Mustermann",
+          groupId: 3,
+          available: [
+            { start: new Date("2025-05-11"), end: new Date("2025-06-01") },
+          ],
+        },
+        {
+          id: 6,
+          name: "Anna Schmidt",
+          groupId: 3,
+          available: [
+            { start: new Date("2025-05-01"), end: new Date("2025-06-30") },
+          ],
+        },
+      ];
+
+      let resourceGroups = [
+        { id: 1, name: "Rooms", expanded: true },
+        { id: 3, name: "Experts", expanded: true },
+      ];
+
+      let events = [
+        {
+          id: 1,
+          resourceId: 1,
+          start: new Date("2025-05-15"),
+          end: new Date("2025-05-18"),
+          title: "Meeting",
+        },
+      ];
+
+      const isResourceAvailable = (resource, date) => {
+        return (
+          resource.available.some((interval) => isInInterval(interval, date)) &&
+          !events.some(
+            (event) =>
+              event.resourceId === resource.id && isInInterval(event, date),
+          )
+        );
+      };
+
+      let addedEvents = [];
+      const newId = () => {
+        const lastId =
+          addedEvents.length > 0 ? addedEvents[addedEvents.length - 1].id : 0;
+        return lastId + 1;
+      };
+
+      const addedEventsRange = () => {
+        let eventMin = new Date("9999-12-30");
+        let eventMax = new Date(0);
+        for (const event of addedEvents) {
+          if (event.start < eventMin) {
+            eventMin = event.start;
+          }
+          if (event.end > eventMax) {
+            eventMax = event.end;
+          }
+        }
+
+        return {
+          start: eventMin,
+          end: eventMax,
+        };
+      };
+
+      let currentStartDate = new Date();
+      let selectedCell = null;
+      let selectedEventId = null;
+      let currentTitle = "new event";
+
+      // Zum Anfang der Woche setzen (Montag)
+      currentStartDate.setDate(
+        currentStartDate.getDate() - currentStartDate.getDay() + 1,
+      );
+      if (currentStartDate.getDay() === 0)
+        currentStartDate.setDate(currentStartDate.getDate() - 6);
+
+      // Initialisierung
+      document.addEventListener("DOMContentLoaded", function () {
+        initScheduler();
+        updateWeekDisplay();
+        setupEventListeners();
+      });
+
+      function formatDateWithIntl(date) {
+        // Für Wochentag (Mo)
+        const weekday = new Intl.DateTimeFormat("de", {
+          weekday: "short",
+        }).format(date);
+
+        // Für Tag.Monat.Jahr
+        const dateFormatter = new Intl.DateTimeFormat("de", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "2-digit",
+        }).format(date);
+
+        return `${weekday} ${dateFormatter}`;
+      }
+
+      function initScheduler() {
+        // Header mit Wochentagen füllen
+        while (headerRow.children.length > 1) {
+          headerRow.removeChild(headerRow.lastChild);
+        }
+
+        for (let i = 0; i < 14; i++) {
+          const day = new Date(currentStartDate);
+          day.setDate(currentStartDate.getDate() + i);
+
+          const th = document.createElement("th");
+          th.className =
+            "border border-gray-300 bg-gray-100 p-2 sticky top-0 w-25";
+
+          th.innerHTML = formatDateWithIntl(day);
+          th.dataset.date = day.toISOString().split("T")[0];
+          headerRow.appendChild(th);
+        }
+
+        // Ressourcen-Zeilen erstellen
+        renderResources();
+      }
+
+      function renderResources() {
+        tableBody.innerHTML = "";
+
+        resourceGroups.forEach((group) => {
+          const groupRow = document.createElement("tr");
+          groupRow.className = "font-bold cursor-pointer overflow-auto";
+
+          // Ressourcen-Zeilen ein-/ausblenden
+          groupRow.addEventListener("click", (e) => {
+            e.stopPropagation();
+            group.expanded = !group.expanded;
+
+            const resourceRows = document.querySelectorAll(
+              `[data-group-id="${group.id}"]`,
+            );
+            resourceRows.forEach((row) => {
+              if (group.expanded) {
+                row.classList.remove("hidden");
+              } else {
+                row.classList.add("hidden");
+              }
+            });
+
+            // Icon aktualisieren
+            window[`group-icon-${group.id}`].textContent = group.expanded
+              ? "▼"
+              : "►";
+          });
+
+          const groupNameCell = document.createElement("td");
+          groupNameCell.className = "p-2 sticky left-0 resize-x overflow-auto";
+
+          const expandIcon = group.expanded ? "▼" : "►";
+          groupNameCell.innerHTML = `<span id="group-icon-${group.id}" class="inline-block w-4 mr-1">${expandIcon}</span>${group.name}`;
+
+          groupRow.appendChild(groupNameCell);
+          tableBody.appendChild(groupRow);
+
+          // Ressourcen für diese Gruppe filtern und rendern
+          for (const resource of resources) {
+            if (resource.groupId !== group.id) {
+              continue;
+            }
+
+            const resourceRow = document.createElement("tr");
+            resourceRow.className = group.expanded ? "" : "hidden";
+            resourceRow.dataset.groupId = group.id;
+            resourceRow.dataset.resourceId = resource.id;
+
+            // Ressourcen-Name
+            const nameCell = document.createElement("td");
+            nameCell.className =
+              "border border-gray-300 font-bold p-1 sticky wrap-anywhere left-0 z-10";
+            nameCell.textContent = resource.name;
+            nameCell.dataset.resourceId = resource.id;
+            if (addedEvents.some((event) => event.resourceId === resource.id)) {
+              nameCell.classList.add("bg-sky-100");
+            } else {
+              nameCell.classList.add("bg-gray-100");
+            }
+
+            // Resizer-Element hinzufügen
+            const resizer = document.createElement("div");
+            resizer.className =
+              "absolute right-0 top-0 bottom-0 w-1 cursor-col-resize bg-gray-300";
+            nameCell.appendChild(resizer);
+
+            resourceRow.appendChild(nameCell);
+
+            const eventsForResource = [...events, ...addedEvents].filter(
+              (event) => event.resourceId === resource.id,
+            );
+
+            const minDay = new Date(
+              currentStartDate.toISOString().split("T")[0],
+            );
+            const maxDay = addDays(minDay, 13);
+
+            // Zellen für jeden Tag
+            for (
+              let day = new Date(minDay);
+              day <= maxDay;
+              day = addDays(day, 1)
+            ) {
+              const dayCell = document.createElement("td");
+              dayCell.className = "border border-gray-300 h-16 z-5";
+              dayCell.dataset.resourceId = resource.id;
+              dayCell.dataset.date = day.toISOString().split("T")[0];
+              dayCell.dataset.available = isResourceAvailable(resource, day);
+              dayCell.dataset.hasEvent = false;
+
+              if (dayCell.dataset.available === "false") {
+                dayCell.classList.add("bg-zinc-500/20");
+              }
+              // Events für diese Zelle rendern
+              for (const event of eventsForResource) {
+                if (!isInInterval(event, day)) continue;
+                dayCell.dataset.hasEvent = true;
+
+                //clip events at display interval borders
+                const eventStart = event.start < minDay ? minDay : event.start;
+                const eventEnd = event.end > maxDay ? maxDay : event.end;
+
+                if (isSameDate(eventStart, day)) {
+                  const eventDiv = document.createElement("div");
+
+                  let diff = dayDifference(eventStart, eventEnd) + 1;
+
+                  eventDiv.className = `bg-purple-500 text-white rounded text-sm justify-center flex items-center z-6 h-[2rem] w-${diff * 25}`;
+                  eventDiv.textContent = `${event.title}`;
+                  eventDiv.onclick = (e) => {
+                    e.stopPropagation();
+
+                    const clickedCell = document.elementsFromPoint(
+                      e.clientX,
+                      e.clientY,
+                    )[1];
+
+                    if (clickedCell.dataset.available === "true") {
+                      clickedCell.onclick(e);
+                    }
+                  };
+                  dayCell.appendChild(eventDiv);
+                }
+              }
+
+              if (dayCell.dataset.available === "true") {
+                dayCell.classList.add("cursor-pointer");
+              }
+
+              if (
+                dayCell.dataset.available === "true" &&
+                dayCell.dataset.hasEvent === "false"
+              ) {
+                dayCell.classList.add("hover:bg-purple-100");
+
+                dayCell.onclick = (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+
+                  const metaKey = e.ctrlKey || e.metaKey;
+
+                  const eventsForResource = addedEvents.filter(
+                    (event) => event.resourceId === resource.id,
+                  );
+                  const maxDayCount = Number(eventDayCount.value);
+                  const dayCount = eventsForResource.reduce((count, event) => {
+                    const eventLength =
+                      dayDifference(event.start, event.end) + 1;
+                    return count + eventLength;
+                  }, 0);
+                  const modifyerKey = e.ctrlKey || e.metaKey;
+
+                  if (dayCount < maxDayCount) {
+                    addOrExtendEvents(
+                      resource,
+                      eventsForResource,
+                      day,
+                      modifyerKey,
+                    );
+                  } else {
+                    shiftEvents(day);
+                  }
+                };
+              }
+
+              if (
+                dayCell.dataset.available === "true" &&
+                dayCell.dataset.hasEvent === "true"
+              ) {
+                dayCell.onclick = (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+
+                  const metaKey = e.ctrlKey || e.metaKey;
+                  let eventForDay = addedEvents.find(
+                    (event) =>
+                      event.resourceId === resource.id &&
+                      isInInterval(event, day),
+                  );
+
+                  removeOrTrimEvent(eventForDay, day, metaKey);
+                };
+              }
+
+              resourceRow.appendChild(dayCell);
+            }
+
+            tableBody.appendChild(resourceRow);
+          }
+        });
+
+        // background color of selected days
+
+        const selectedColor = "bg-sky-100";
+        const headerColor = "bg-gray-100";
+        document.querySelectorAll(`[data-date]`).forEach((dayCell) => {
+          const day = new Date(dayCell.dataset.date);
+          let isSelected = addedEvents.some((event) =>
+            isInInterval(event, day),
+          );
+
+          if (
+            isSelected &&
+            (dayCell.dataset.available === "true" || dayCell.localName === "th")
+          ) {
+            if (dayCell.localName === "th") {
+              dayCell.classList.remove(headerColor);
+            }
+            dayCell.classList.add(selectedColor);
+          } else {
+            if (dayCell.localName === "th") {
+              dayCell.classList.add(headerColor);
+            }
+            dayCell.classList.remove(selectedColor);
+          }
+        });
+
+        // Ressourcen ohne Gruppe (falls vorhanden)
+        const ungroupedResources = resources.filter(
+          (resource) => !resource.groupId,
+        );
+        if (ungroupedResources.length > 0) {
+          console.error("Ressourcen ohne Gruppen werden nicht angezeigt");
+        }
+
+        initResizers();
+      }
+
+      function addOrExtendEvents(
+        resource,
+        eventsForResource,
+        date,
+        modifyerKey,
+      ) {
+        const title = eventTitle.value;
+        if (modifyerKey && isResourceAvailable(resource, date)) {
+          addedEvents.push({
+            id: newId(),
+            title,
+            resourceId: resource.id,
+            start: date,
+            end: date,
+          });
+
+          mergeEvents(resource.id);
+
+          renderResources();
+          return;
+        }
+
+        // add or extend based on existing events
+        if (eventsForResource.length > 0) {
+          if (addedEvents.length != eventsForResource.length) {
+            const { start, end } = addedEventsRange();
+            if (date < start || date > end) {
+              alert("Date is not in selection");
+              return;
+            }
+          }
+
+          let eventsToExtend = [];
+          for (const event of eventsForResource) {
+            if (isSameDate(event.start, addDays(date, 1))) {
+              eventsToExtend.push({ event, extends: "start" });
+            }
+            if (isSameDate(event.end, addDays(date, -1))) {
+              eventsToExtend.push({ event, extends: "end" });
+            }
+          }
+
+          if (eventsToExtend.length === 0) {
+            addedEvents.push({
+              id: newId(),
+              resourceId: resource.id,
+              start: date,
+              end: date,
+              title,
+            });
+          } else if (eventsToExtend.length == 2) {
+            let [{ event: event1 }, { event: event2 }] = eventsToExtend;
+            if (event2.start < event1.start) {
+              [event1, event2] = [event2, event1];
+            }
+
+            event1.end = event2.end;
+            addedEvents = addedEvents.filter(({ id }) => id !== event2.id);
+          } else if (eventsToExtend.length == 1) {
+            eventsToExtend[0].event[eventsToExtend[0].extends] = date;
+          }
+          // add event if other events exists but no event for this resource
+        } else if (addedEvents.length > 0) {
+          const dayCountPerResource = {};
+          let max = 0;
+          let resourceId = undefined;
+          for (const event of addedEvents) {
+            const count = dayDifference(event.start, event.end) + 1;
+            if (dayCountPerResource[event.resourceId] === undefined) {
+              dayCountPerResource[event.resourceId] = 0;
+            }
+            const currentCount = (dayCountPerResource[event.resourceId] +=
+              count);
+            if (max < currentCount) {
+              max = currentCount;
+              resourceId = event.resourceId;
+            }
+          }
+
+          const events = addedEvents
+            .filter((event) => event.resourceId === resourceId)
+            .flatMap((event) => everyDayOfInterval(event))
+            .toSorted((a, b) => a.getTime() - b.getTime())
+            .forEach((day) => {
+              const newEvent = {
+                id: newId(),
+                title,
+                resourceId: resource.id,
+                start: day,
+                end: day,
+              };
+
+              if (isResourceAvailable(resource, day)) {
+                addedEvents.push(newEvent);
+              }
+            });
+
+          mergeEvents(resource.id);
+
+          // add event if it is the first event
+        } else {
+          const newEvent = {
+            id: newId(),
+            resourceId: resource.id,
+            start: date,
+            end: addDays(date, Number(eventDayCount.value) - 1),
+            title,
+          };
+
+          const isBlockedByEvent = events.some(
+            (event) =>
+              event.resourceId === resource.id &&
+              intervalsOverlap(event, newEvent),
+          );
+
+          if (
+            resource.available.some((interval) =>
+              intervalContainsInterval(interval, newEvent),
+            ) &&
+            !isBlockedByEvent
+          ) {
+            addedEvents.push(newEvent);
+          } else {
+            alert(`Ressource ${resource.name} is not available`);
+          }
+        }
+
+        renderResources();
+      }
+
+      function mergeEvents(resourceId) {
+        let eventIdsToRemove = [];
+        const resourceEvents = addedEvents
+          .filter((event) => event.resourceId === resourceId)
+          .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+        let currentEvent = resourceEvents[0];
+        for (let i = 1; i < resourceEvents.length; i++) {
+          const prevEnd = addDays(currentEvent.end, 1);
+          const currentStart = resourceEvents[i].start;
+          if (isSameDate(prevEnd, currentStart)) {
+            currentEvent.end = resourceEvents[i].end;
+            eventIdsToRemove.push(resourceEvents[i].id);
+          } else {
+            currentEvent = resourceEvents[i];
+          }
+        }
+
+        addedEvents = addedEvents.filter(
+          (event) =>
+            event.resourceId !== resourceId ||
+            !eventIdsToRemove.includes(event.id),
+        );
+      }
+
+      function removeOrTrimEvent(event, date, metaKey) {
+        if (metaKey) {
+          if (isSameDate(event.start, date)) {
+            event.start = addDays(event.start, 1);
+          } else if (isSameDate(event.end, date)) {
+            event.end = addDays(event.end, -1);
+          } else {
+            // split event at clicked date
+
+            addedEvents.push({
+              ...event,
+              id: newId(),
+              start: addDays(date, 1),
+              end: event.end,
+            });
+
+            event.end = addDays(date, -1);
+          }
+        } else {
+          addedEvents = addedEvents.filter(
+            ({ resourceId }) => resourceId !== event.resourceId,
+          );
+        }
+
+        renderResources();
+      }
+
+      function shiftEvents(date) {
+        const { start, end } = addedEventsRange();
+        if (date >= start && date <= end) {
+          return;
+        }
+
+        const diff = dayDifference(date < start ? start : end, date);
+
+        const shiftedEvents = [];
+        let passed = true;
+        for (const event of addedEvents) {
+          const resource = resources.find((res) => res.id === event.resourceId);
+          if (!resource) {
+            throw new Error(`Resource with id ${event.resourceId} not found`);
+          }
+
+          const shiftedEvent = {
+            ...event,
+            start: addDays(event.start, diff),
+            end: addDays(event.end, diff),
+          };
+
+          if (
+            !resource.available.some((interval) =>
+              intervalContainsInterval(interval, shiftedEvent),
+            )
+          ) {
+            alert(`Resource ${resource.name} is not available`);
+            passed = false;
+            break;
+          } else {
+            shiftedEvents.push(shiftedEvent);
+          }
+        }
+
+        if (passed) {
+          addedEvents = shiftedEvents;
+        }
+
+        renderResources();
+      }
+
+      function setupEventListeners() {
+        // Navigation zwischen Wochen
+        document
+          .getElementById("next-week")
+          .addEventListener("click", function () {
+            currentStartDate.setDate(currentStartDate.getDate() + 14);
+            initScheduler();
+            updateWeekDisplay();
+            // scroll to start of table
+            schedulerContainer.scrollTo({
+              left: 0,
+              behavior: "smooth",
+            });
+          });
+
+        document
+          .getElementById("prev-week")
+          .addEventListener("click", function () {
+            currentStartDate.setDate(currentStartDate.getDate() - 14);
+            initScheduler();
+            updateWeekDisplay();
+            // scroll to end of table
+            schedulerContainer.scrollTo({
+              left:
+                schedulerContainer.scrollWidth - schedulerContainer.clientWidth,
+              behavior: "smooth",
+            });
+          });
+      }
+
+      function updateWeekDisplay() {
+        const endDate = new Date(currentStartDate);
+        endDate.setDate(endDate.getDate() + 13);
+
+        const formatOptions = {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        };
+        const startFormatted = currentStartDate.toLocaleDateString(
+          "de-DE",
+          formatOptions,
+        );
+        const endFormatted = endDate.toLocaleDateString("de-DE", formatOptions);
+
+        document.getElementById("current-week-display").textContent =
+          `${startFormatted} - ${endFormatted}`;
+      }
+
+      // Resizer für die Ressourcen-Spalte
+      function initResizers() {
+        const resizers = document.querySelectorAll(".cursor-col-resize");
+
+        resizers.forEach((resizer) => {
+          resizer.addEventListener("mousedown", initResize);
+        });
+      }
+
+      function initResize(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const cell = e.target.parentElement;
+        const initialWidth = cell.offsetWidth;
+        const initialX = e.clientX;
+
+        function startResize(e) {
+          const newWidth = initialWidth + (e.clientX - initialX);
+          if (newWidth > 100) {
+            // Mindestbreite
+            document.querySelectorAll(".sticky.left-0").forEach((nameCell) => {
+              nameCell.style.width = newWidth + "px";
+            });
+          }
+        }
+
+        function stopResize() {
+          document.removeEventListener("mousemove", startResize);
+          document.removeEventListener("mouseup", stopResize);
+        }
+
+        document.addEventListener("mousemove", startResize);
+        document.addEventListener("mouseup", stopResize);
+      }
+
+      function isSameDate(a, b) {
+        return (
+          a.getYear() === b.getYear() &&
+          a.getMonth() === b.getMonth() &&
+          a.getDate() === b.getDate()
+        );
+      }
+      function addDays(date, number) {
+        const newDate = new Date(date.getTime() + 24 * 60 * 60 * 1000 * number);
+        return newDate;
+      }
+      function isInInterval(interval, date) {
+        return date >= interval.start && date <= interval.end;
+      }
+      function dayDifference(a, b) {
+        return Math.floor((b.getTime() - a.getTime()) / (24 * 60 * 60 * 1000));
+      }
+      function intervalContainsInterval(a, b) {
+        return a.start <= b.start && a.end >= b.end;
+      }
+      function intervalsOverlap(a, b) {
+        return (
+          (a.start <= b.start && a.end >= b.start) ||
+          (a.start <= b.end && a.end >= b.end)
+        );
+      }
+      function startOfDay(date) {
+        return new Date(date.toISOString().split("T")[0]);
+      }
+      function everyDayOfInterval({ start, end }) {
+        const days = [];
+        for (let day = startOfDay(start); day <= end; day = addDays(day, 1)) {
+          days.push(day);
+        }
+        return days;
+      }
+    </script>
+  </body>
+</html>
