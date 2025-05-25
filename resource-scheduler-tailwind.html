@@ -181,6 +181,13 @@
           }
         }
 
+        if (addedEvents.length === 0) {
+          return {
+            start: eventMax,
+            end: eventMin,
+          };
+        }
+
         return {
           start: eventMin,
           end: eventMax,
@@ -379,7 +386,7 @@
                 dayCell.dataset.available === "true" &&
                 dayCell.dataset.hasEvent === "false"
               ) {
-                dayCell.classList.add("hover:bg-purple-100");
+                dayCell.classList.add("hover:bg-purple-300");
 
                 dayCell.onclick = (e) => {
                   e.preventDefault();
@@ -481,126 +488,48 @@
         modifyerKey,
       ) {
         const title = eventTitle.value;
-        if (modifyerKey && isResourceAvailable(resource, date)) {
-          addedEvents.push({
-            id: newId(),
-            title,
-            resourceId: resource.id,
+        const eventLength = Number(eventDayCount.value);
+        // add or extend based on existing events
+
+        let days;
+        if (modifyerKey) {
+          days = [date];
+        } else if (addedEvents.length === 0) {
+          days = everyDayOfInterval({
             start: date,
-            end: date,
+            end: addDays(date, eventLength - 1),
           });
-
-          mergeEvents(resource.id);
-
-          renderResources();
-          return;
+        } else {
+          days = addedEvents
+            .flatMap((event) => everyDayOfInterval(event))
+            .filter(
+              (day, idx, arr) =>
+                idx === arr.findIndex((d) => isSameDate(d, day)),
+            )
+            .toSorted((a, b) => a.getTime() - b.getTime())
+            .slice(0, eventLength);
         }
 
-        // add or extend based on existing events
-        if (eventsForResource.length > 0) {
-          if (addedEvents.length != eventsForResource.length) {
-            const { start, end } = addedEventsRange();
-            if (date < start || date > end) {
-              alert("Date is not in selection");
-              return;
-            }
-          }
-
-          let eventsToExtend = [];
-          for (const event of eventsForResource) {
-            if (isSameDate(event.start, addDays(date, 1))) {
-              eventsToExtend.push({ event, extends: "start" });
-            }
-            if (isSameDate(event.end, addDays(date, -1))) {
-              eventsToExtend.push({ event, extends: "end" });
-            }
-          }
-
-          if (eventsToExtend.length === 0) {
-            addedEvents.push({
-              id: newId(),
-              resourceId: resource.id,
-              start: date,
-              end: date,
-              title,
-            });
-          } else if (eventsToExtend.length == 2) {
-            let [{ event: event1 }, { event: event2 }] = eventsToExtend;
-            if (event2.start < event1.start) {
-              [event1, event2] = [event2, event1];
-            }
-
-            event1.end = event2.end;
-            addedEvents = addedEvents.filter(({ id }) => id !== event2.id);
-          } else if (eventsToExtend.length == 1) {
-            eventsToExtend[0].event[eventsToExtend[0].extends] = date;
-          }
-          // add event if other events exists but no event for this resource
-        } else if (addedEvents.length > 0) {
-          const dayCountPerResource = {};
-          let max = 0;
-          let resourceId = undefined;
-          for (const event of addedEvents) {
-            const count = dayDifference(event.start, event.end) + 1;
-            if (dayCountPerResource[event.resourceId] === undefined) {
-              dayCountPerResource[event.resourceId] = 0;
-            }
-            const currentCount = (dayCountPerResource[event.resourceId] +=
-              count);
-            if (max < currentCount) {
-              max = currentCount;
-              resourceId = event.resourceId;
-            }
-          }
-
-          const events = addedEvents
-            .filter((event) => event.resourceId === resourceId)
-            .flatMap((event) => everyDayOfInterval(event))
-            .toSorted((a, b) => a.getTime() - b.getTime())
-            .forEach((day) => {
-              const newEvent = {
-                id: newId(),
-                title,
-                resourceId: resource.id,
-                start: day,
-                end: day,
-              };
-
-              if (isResourceAvailable(resource, day)) {
-                addedEvents.push(newEvent);
-              }
-            });
-
-          mergeEvents(resource.id);
-
-          // add event if it is the first event
-        } else {
+        days.forEach((day) => {
           const newEvent = {
             id: newId(),
-            resourceId: resource.id,
-            start: date,
-            end: addDays(date, Number(eventDayCount.value) - 1),
             title,
+            resourceId: resource.id,
+            start: day,
+            end: day,
           };
 
-          const isBlockedByEvent = events.some(
-            (event) =>
-              event.resourceId === resource.id &&
-              intervalsOverlap(event, newEvent),
-          );
-
-          if (
-            resource.available.some((interval) =>
-              intervalContainsInterval(interval, newEvent),
-            ) &&
-            !isBlockedByEvent
-          ) {
-            addedEvents.push(newEvent);
-          } else {
-            alert(`Ressource ${resource.name} is not available`);
+          if (isResourceAvailable(resource, day)) {
+            if (
+              eventsForResource.length === 0 ||
+              !eventsForResource.some((event) => isInInterval(event, day))
+            ) {
+              addedEvents.push(newEvent);
+            }
           }
-        }
+        });
 
+        mergeEvents(resource.id);
         renderResources();
       }
 
@@ -791,7 +720,8 @@
         );
       }
       function addDays(date, number) {
-        const newDate = new Date(date.getTime() + 24 * 60 * 60 * 1000 * number);
+        const newDate = new Date(date.getTime());
+        newDate.setDate(date.getDate() + number);
         return newDate;
       }
       function isInInterval(interval, date) {
