@@ -7,8 +7,8 @@
     <!-- Tailwind CSS über CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   </head>
-  <body class="bg-gray-100 m-0 p-5">
-    <div class="max-w-7xl mx-auto bg-white rounded-lg shadow-md p-5">
+  <body class="bg-gray-100 m-0 p-2">
+    <div class="max-w-8xl mx-auto bg-white rounded-lg shadow-md p-2">
       <h1 class="text-center text-2xl font-bold text-gray-800 mb-5">
         Resource-Scheduler
       </h1>
@@ -76,6 +76,7 @@
           <thead>
             <tr id="headerRow">
               <th
+                data-resource-id="all"
                 class="border border-gray-300 bg-gray-100 p-2 relative sticky top-0 left-0 overflow-auto z-10 w-50"
               >
                 Resources
@@ -92,66 +93,14 @@
         </table>
       </div>
       <p class="text-sm">
-        <i
-          >Press <kbd>CTRL</kbd> or <kbd>CMD</kbd> to add or remove single
-          days</i
+        <i>
+          To add or remove single days click while holding <kbd>ctrl</kbd> or
+          <kbd>cmd</kbd></i
         >
       </p>
     </div>
 
     <script>
-      // Datenstrukturen
-      let resources = [
-        {
-          id: 1,
-          name: "Room 1",
-          groupId: 1,
-          available: [
-            { start: new Date("2025-05-01"), end: new Date("2025-05-18") },
-            { start: new Date("2025-06-01"), end: new Date("2025-06-30") },
-          ],
-        },
-        {
-          id: 2,
-          name: "Room 2",
-          groupId: 1,
-          available: [
-            { start: new Date("2025-05-01"), end: new Date("2025-06-04") },
-          ],
-        },
-        {
-          id: 5,
-          name: "Max Mustermann",
-          groupId: 3,
-          available: [
-            { start: new Date("2025-05-11"), end: new Date("2025-06-01") },
-          ],
-        },
-        {
-          id: 6,
-          name: "Anna Schmidt",
-          groupId: 3,
-          available: [
-            { start: new Date("2025-05-01"), end: new Date("2025-06-30") },
-          ],
-        },
-      ];
-
-      let resourceGroups = [
-        { id: 1, name: "Rooms", expanded: true },
-        { id: 3, name: "Experts", expanded: true },
-      ];
-
-      let events = [
-        {
-          id: 1,
-          resourceId: 1,
-          start: new Date("2025-05-15"),
-          end: new Date("2025-05-18"),
-          title: "Meeting",
-        },
-      ];
-
       const isResourceAvailable = (resource, date) => {
         return (
           resource.available.some((interval) => isInInterval(interval, date)) &&
@@ -167,31 +116,6 @@
         const lastId =
           addedEvents.length > 0 ? addedEvents[addedEvents.length - 1].id : 0;
         return lastId + 1;
-      };
-
-      const addedEventsRange = () => {
-        let eventMin = new Date("9999-12-30");
-        let eventMax = new Date(0);
-        for (const event of addedEvents) {
-          if (event.start < eventMin) {
-            eventMin = event.start;
-          }
-          if (event.end > eventMax) {
-            eventMax = event.end;
-          }
-        }
-
-        if (addedEvents.length === 0) {
-          return {
-            start: eventMax,
-            end: eventMin,
-          };
-        }
-
-        return {
-          start: eventMin,
-          end: eventMax,
-        };
       };
 
       let currentStartDate = new Date();
@@ -360,7 +284,8 @@
 
                   let diff = dayDifference(eventStart, eventEnd) + 1;
 
-                  eventDiv.className = `bg-purple-500 text-white rounded text-sm justify-center flex items-center z-6 h-[2rem] w-${diff * 25}`;
+                  const width = diff * 25 - 2;
+                  eventDiv.className = `ml-1 bg-purple-500 border-1 border-black text-white rounded text-sm justify-center flex items-center z-6 h-[2rem] w-${width}`;
                   eventDiv.textContent = `${event.title}`;
                   eventDiv.onclick = (e) => {
                     e.stopPropagation();
@@ -470,14 +395,6 @@
           }
         });
 
-        // Ressourcen ohne Gruppe (falls vorhanden)
-        const ungroupedResources = resources.filter(
-          (resource) => !resource.groupId,
-        );
-        if (ungroupedResources.length > 0) {
-          console.error("Ressourcen ohne Gruppen werden nicht angezeigt");
-        }
-
         initResizers();
       }
 
@@ -492,7 +409,7 @@
         // add or extend based on existing events
 
         let days;
-        if (modifyerKey) {
+        if (modifyerKey || eventsForResource.length > 0) {
           days = [date];
         } else if (addedEvents.length === 0) {
           days = everyDayOfInterval({
@@ -586,7 +503,12 @@
       }
 
       function shiftEvents(date) {
-        const { start, end } = addedEventsRange();
+        const eventDates = addedEvents
+          .flatMap((event) => everyDayOfInterval(event))
+          .sort((a, b) => a.getTime() - b.getTime());
+        const start = eventDates[0];
+        const end = eventDates[eventDates.length - 1];
+
         if (date >= start && date <= end) {
           return;
         }
@@ -696,10 +618,11 @@
         function startResize(e) {
           const newWidth = initialWidth + (e.clientX - initialX);
           if (newWidth > 100) {
-            // Mindestbreite
-            document.querySelectorAll(".sticky.left-0").forEach((nameCell) => {
-              nameCell.style.width = newWidth + "px";
-            });
+            document
+              .querySelectorAll("[data-resource-id]")
+              .forEach((nameCell) => {
+                nameCell.style.width = newWidth + "px";
+              });
           }
         }
 
@@ -727,8 +650,10 @@
       function isInInterval(interval, date) {
         return date >= interval.start && date <= interval.end;
       }
-      function dayDifference(a, b) {
-        return Math.floor((b.getTime() - a.getTime()) / (24 * 60 * 60 * 1000));
+      function dayDifference(lower, upper) {
+        return Math.floor(
+          (upper.getTime() - lower.getTime()) / (24 * 60 * 60 * 1000),
+        );
       }
       function intervalContainsInterval(a, b) {
         return a.start <= b.start && a.end >= b.end;
@@ -749,6 +674,215 @@
         }
         return days;
       }
+    </script>
+
+    <script>
+      // testdata
+      let resourceGroups = [
+        { id: 1, name: "Rooms", expanded: true },
+        { id: 2, name: "Experts", expanded: true },
+      ];
+
+      // Test Data Generator
+
+      let resources = [];
+      let events = [];
+
+      //Test interval
+      const testStart = new Date();
+      testStart.setDate(1);
+      const testEnd = addDays(testStart, 60);
+
+      // Helper function to generate random date within a range
+      function randomDateBetween(start, end) {
+        const diff = dayDifference(start, end);
+        const newDate = new Date(start.toISOString().split("T")[0]);
+        newDate.setDate(newDate.getDate() + Math.ceil(Math.random() * diff));
+        return newDate;
+      }
+
+      // Generate 5 Experts (groupId: 3)
+      const expertNames = [
+        "Dr. Sarah Johnson",
+        "Prof. Michael Chen",
+        "Dr. Elena Rodriguez",
+        "Dr. James Wilson",
+        "Dr. Lisa Thompson",
+        "Dr. Robert Anderson",
+        "Prof. Maria Garcia",
+        "Dr. David Kim",
+        "Dr. Jennifer Brown",
+        "Prof. Ahmed Hassan",
+        "Dr. Jonny Sinns",
+      ];
+      for (const name of expertNames) {
+        resources.push({
+          id: resources.length,
+          name: name,
+          groupId: 2,
+          available: [{ start: testStart, end: testEnd }],
+        });
+      }
+
+      // Generate 500 Rooms (groupId: 1)
+      for (let i = 0; i < 500; i++) {
+        const roomId = i + 100; // Start room IDs from 100
+        const roomNumber = i + 1;
+        const roomName = `Room ${roomNumber.toString().padStart(3, "0")}`;
+
+        // Generate 1-3 availability periods per room, each minimum 5 days
+        const availabilityPeriods = [];
+        const numPeriods = Math.floor(Math.random() * 4) + 2;
+
+        for (let j = 0; j < numPeriods; j++) {
+          let periodStart = testStart;
+          let periodEnd = testEnd;
+
+          while (
+            availabilityPeriods.some((iv) => isInInterval(iv, periodStart))
+          ) {
+            periodStart = randomDateBetween(testStart, addDays(testEnd, -7));
+          }
+
+          periodEnd = periodStart;
+          while (dayDifference(periodStart, periodEnd) < 2) {
+            periodEnd = randomDateBetween(periodStart, addDays(periodStart, 7));
+          }
+
+          availabilityPeriods.push({
+            start: startOfDay(new Date(periodStart)),
+            end: startOfDay(new Date(periodEnd)),
+          });
+        }
+
+        resources.push({
+          id: roomId,
+          name: roomName,
+          groupId: 1,
+          available: availabilityPeriods,
+        });
+      }
+
+      // Generate 300 Events
+      const eventTitles = [
+        "Team Meeting",
+        "Project Review",
+        "Client Presentation",
+        "Training Session",
+        "Workshop",
+        "Conference Call",
+        "Strategy Session",
+        "Board Meeting",
+        "Product Demo",
+        "Sales Pitch",
+        "Design Review",
+        "Code Review",
+        "Planning Session",
+        "Retrospective",
+        "Standup Meeting",
+        "All Hands",
+        "Town Hall",
+        "Quarterly Review",
+        "Budget Meeting",
+        "Performance Review",
+        "Interview",
+        "Onboarding",
+        "Technical Discussion",
+        "Brainstorming",
+        "Research Session",
+        "Testing Phase",
+        "Deployment Meeting",
+        "Client Call",
+        "Vendor Meeting",
+        "Contract Review",
+        "Legal Consultation",
+        "HR Meeting",
+        "Marketing Campaign",
+        "Launch Event",
+        "User Testing",
+        "Focus Group",
+        "Data Analysis",
+        "Report Presentation",
+        "Audit Meeting",
+        "Compliance Review",
+      ];
+
+      const rooms = resources.filter((res) => res.groupId === 1);
+      const experts = resources.filter((res) => res.groupId === 2);
+
+      for (const expert of experts) {
+        const availableDays = expert.available.flatMap((iv) =>
+          everyDayOfInterval(iv),
+        );
+
+        let idx = 0;
+        while (idx < availableDays.length) {
+          const start = availableDays[idx];
+          const endIdx = idx + Math.floor(Math.random() * 4) + 1;
+          const end = availableDays[endIdx];
+
+          // Random event title
+          const titleIndex = Math.floor(Math.random() * eventTitles.length);
+          const eventTitle = eventTitles[titleIndex];
+
+          events.push({
+            id: events.length,
+            resourceId: expert.id,
+            start,
+            end,
+            title: eventTitle,
+          });
+
+          // Randomly select a resource (room or expert)
+          const roomsIndex = Math.floor(Math.random() * rooms.length);
+          const selectedRoom1 = rooms[roomsIndex];
+          events.push({
+            id: events.length,
+            resourceId: selectedRoom1.id,
+            start,
+            end,
+            title: eventTitle,
+          });
+
+          const selectedRoom2 =
+            rooms[
+              roomsIndex +
+                Math.ceil(Math.random() * (rooms.length - roomsIndex - 1))
+            ];
+          events.push({
+            id: events.length,
+            resourceId: selectedRoom2.id,
+            start,
+            end,
+            title: eventTitle,
+          });
+
+          idx = endIdx + Math.floor(Math.random() * 4) + 1;
+        }
+      }
+
+      // Export the data
+      console.log("Generated Test Data:");
+      console.log(
+        `- ${resources.filter((r) => r.groupId === 2).length} Experts`,
+      );
+      console.log(`- ${resources.filter((r) => r.groupId === 1).length} Rooms`);
+      console.log(`- ${events.length} Events`);
+
+      // The actual data objects
+      let testResources = resources;
+      let testEvents = events;
+
+      // Example usage:
+      console.log("\nFirst 5 resources:");
+      console.log(testResources.slice(0, 5));
+
+      console.log("\nFirst 5 events:");
+      console.log(testEvents.slice(0, 5));
+
+      console.log(
+        "\nData ready for use as 'testResources' and 'testEvents' variables",
+      );
     </script>
   </body>
 </html>
