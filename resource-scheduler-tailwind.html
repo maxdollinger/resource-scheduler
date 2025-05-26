@@ -12,6 +12,7 @@
       <h1 class="text-center text-2xl font-bold text-gray-800 mb-5">
         Resource-Scheduler
       </h1>
+      <p id="testInfo" class="text-sm p-2"></p>
 
       <details class="border border-1 p-2 rounded-md">
         <summary class="text-lg font-bold">Event Settings</summary>
@@ -285,7 +286,7 @@
                   let diff = dayDifference(eventStart, eventEnd) + 1;
 
                   const width = diff * 25 - 2;
-                  eventDiv.className = `ml-1 bg-purple-500 border-1 shadow-md text-gray-200 rounded text-sm justify-center flex items-center z-10 h-[2rem] w-${width}`;
+                  eventDiv.className = `ml-1 bg-purple-500 shadow-md text-gray-200 rounded text-sm justify-center flex items-center z-10 h-[2rem] w-${width}`;
                   eventDiv.textContent = `${event.title}`;
                   eventDiv.onclick = (e) => {
                     e.stopPropagation();
@@ -860,6 +861,8 @@
           idx = endIdx + Math.floor(Math.random() * 4) + 1;
         }
       }
+
+      testInfo.innerHTML = `<span class="font-bold">Test Info:</span> ${resources.length} Resources | ${events.length} Events`;
 
       // Export the data
       console.log("Generated Test Data:");
