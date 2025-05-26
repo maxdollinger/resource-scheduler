@@ -68,6 +68,12 @@
         </div>
       </div>
 
+      <p class="text-sm">
+        <i>
+          To add or remove single days click while holding <kbd>ctrl</kbd> or
+          <kbd>cmd</kbd></i
+        >
+      </p>
       <div id="schedulerContainer" class="overflow-x-auto pb-[1rem]">
         <table
           class="w-[fit-content] border-collapse table-fixed"
@@ -92,12 +98,6 @@
           </tbody>
         </table>
       </div>
-      <p class="text-sm">
-        <i>
-          To add or remove single days click while holding <kbd>ctrl</kbd> or
-          <kbd>cmd</kbd></i
-        >
-      </p>
     </div>
 
     <script>
@@ -285,7 +285,7 @@
                   let diff = dayDifference(eventStart, eventEnd) + 1;
 
                   const width = diff * 25 - 2;
-                  eventDiv.className = `ml-1 bg-purple-500 border-1 border-black text-white rounded text-sm justify-center flex items-center z-6 h-[2rem] w-${width}`;
+                  eventDiv.className = `ml-1 bg-purple-500 border-1 shadow-md text-gray-200 rounded text-sm justify-center flex items-center z-10 h-[2rem] w-${width}`;
                   eventDiv.textContent = `${event.title}`;
                   eventDiv.onclick = (e) => {
                     e.stopPropagation();
@@ -725,7 +725,7 @@
       }
 
       // Generate 500 Rooms (groupId: 1)
-      for (let i = 0; i < 500; i++) {
+      for (let i = 0; i < 300; i++) {
         const roomId = i + 100; // Start room IDs from 100
         const roomNumber = i + 1;
         const roomName = `Room ${roomNumber.toString().padStart(3, "0")}`;
